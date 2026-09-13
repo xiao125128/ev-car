@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d1b2a">
+<title>纯电动汽车 · 部件结构认识</title>
+<style>
+  :root{
+    --bg:#0d1b2a; --panel:#13283f; --line:#27415f;
+    --txt:#eaf3ff; --muted:#9fb8d6; --accent:#35c2f5; --accent2:#1f8fd0;
+    --blue:#35c2f5; --orange:#ffb020; --green:#2fe08a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--txt);overflow:hidden;height:100dvh;}
+
+  .app{display:flex;flex-direction:column;height:100%;}
+
+  /* ---------- 顶部工具栏 ---------- */
+  .toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex-wrap:wrap;z-index:20;}
+  .toolbar .title{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;margin-right:4px;}
+  .toolbar .title .ic{font-size:20px;}
+  .spacer{flex:1;}
+  .tbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:36px;height:36px;padding:0 12px;
+    border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--txt);border-radius:10px;font-weight:700;
+    font-size:14px;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .tbtn:hover{background:rgba(255,255,255,.12);border-color:var(--accent);}
+  .tbtn:active{transform:scale(.94);}
+  .tbtn.primary{background:var(--accent2);border-color:var(--accent2);}
+  .zoom-ind{min-width:52px;text-align:center;font-variant-numeric:tabular-nums;font-weight:800;color:var(--accent);}
+
+  /* ---------- 主体 ---------- */
+  .main{flex:1;display:flex;position:relative;overflow:hidden;}
+  .viewport{flex:1;position:relative;overflow:hidden;background:
+    radial-gradient(circle at 50% 40%, #16283f 0%, #0d1b2a 70%);touch-action:none;cursor:grab;}
+  .viewport.grabbing{cursor:grabbing;}
+  .stage{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;}
+  .stage.transition{transition:transform .35s cubic-bezier(.25,.8,.3,1);}
+  .carimg{position:absolute;left:0;top:0;width:100%;height:100%;display:block;pointer-events:none;user-select:none;
+    filter:drop-shadow(0 10px 40px rgba(0,0,0,.5));}
+  .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:5;font-size:12px;color:var(--muted);
+    background:rgba(13,27,42,.7);padding:6px 14px;border-radius:999px;border:1px solid var(--line);pointer-events:none;
+    white-space:nowrap;}
+
+  /* ---------- 热点标注 ---------- */
+  .spot{position:absolute;left:0;top:0;width:0;height:0;z-index:4;}
+  .pin{position:absolute;left:0;top:0;margin-left:-15px;margin-top:-15px;width:30px;height:30px;border-radius:50%;
+    display:grid;place-items:center;cursor:pointer;background:rgba(53,194,245,.92);border:2px solid #fff;color:#05283a;
+    font-weight:900;font-size:13px;box-shadow:0 3px 10px rgba(0,0,0,.45);transform:scale(var(--invscale,1));
+    transform-origin:center;transition:box-shadow .15s;}
+  .pin:hover{box-shadow:0 0 0 6px rgba(53,194,245,.28);}
+  .spot.inferred .pin{background:rgba(255,176,32,.95);color:#3a2400;}
+  .spot.active .pin{background:var(--green);color:#03240f;box-shadow:0 0 0 7px rgba(47,224,138,.3);}
+  .pin .lbl{position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);white-space:nowrap;
+    background:rgba(13,27,42,.92);border:1px solid var(--line);color:var(--txt);font-size:11px;font-weight:600;
+    padding:2px 7px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .2s;}
+  .pin:hover .lbl,.spot.active .lbl{opacity:1;}
+
+  /* ---------- 侧栏（部件列表） ---------- */
+  .sidebar{width:272px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;overflow:hidden;transition:transform .3s ease;}
+  .sidebar .head{padding:12px 14px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);}
+  .sidebar .head b{color:var(--txt);}
+  .list{flex:1;overflow-y:auto;padding:8px;}
+  .item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 10px;border-radius:10px;
+    border:none;background:transparent;color:var(--txt);cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;
+    transition:background .12s;}
+  .item:hover{background:rgba(255,255,255,.07);}
+  .item .num{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:900;
+    background:var(--blue);color:#05283a;}
+  .item.inferred .num{background:var(--orange);color:#3a2400;}
+  .item.active{background:rgba(47,224,138,.14);}
+  .item.active .num{background:var(--green);color:#03240f;}
+  .item .tag{margin-left:auto;font-size:10px;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 5px;flex:none;}
+  .legend{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.7;}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+  .dot.blue{background:var(--blue);} .dot.orange{background:var(--orange);}
+
+  /* ---------- 信息卡 ---------- */
+  .info{position:fixed;left:50%;bottom:20px;transform:translate(-50%,140%);z-index:50;width:min(560px,calc(100vw - 24px));
+    background:var(--panel);border:1px solid var(--accent);border-radius:16px;box-shadow:0 14px 50px rgba(0,0,0,.55);
+    padding:16px 18px;transition:transform .3s cubic-bezier(.3,1.3,.4,1);}
+  .info.show{transform:translate(-50%,0);}
+  .info .i-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:900;margin-bottom:8px;}
+  .info .i-title .num{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;
+    background:var(--green);color:#03240f;}
+  .info .i-title .badge{font-size:11px;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:2px 7px;font-weight:700;}
+  .info .i-desc{font-size:14.5px;line-height:1.85;color:#dbe7f5;}
+  .info .close{position:absolute;right:12px;top:10px;width:30px;height:30px;border:none;background:rgba(255,255,255,.08);
+    color:var(--txt);border-radius:8px;font-size:16px;cursor:pointer;}
+
+  @media (max-width:760px){
+    .main{flex-direction:column;}
+    .sidebar{position:absolute;left:0;right:0;bottom:0;width:auto;max-height:42%;z-index:30;border-left:none;border-top:1px solid var(--line);
+      transform:translateY(100%);}
+    .sidebar.open{transform:translateY(0);}
+    .info{bottom:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div class="title"><span class="ic">⚡</span>纯电动汽车 · 部件结构认识</div>
+    <div class="spacer"></div>
+    <button class="tbtn" id="btnOut" title="缩小">−</button>
+    <span class="zoom-ind" id="zoomInd">100%</span>
+    <button class="tbtn" id="btnIn" title="放大">＋</button>
+    <button class="tbtn" id="btnFit" title="适应窗口">适应</button>
+    <button class="tbtn" id="btnReset" title="复位">复位</button>
+    <button class="tbtn primary" id="btnList">☰ 部件列表</button>
+  </div>
+
+  <div class="main">
+    <div class="viewport" id="viewport">
+      <div class="stage" id="stage">
+        <img class="carimg" id="carimg" src="car.png" alt="纯电动汽车结构图">
+      </div>
+      <div class="hint" id="hint">🖱️ 滚轮 / 双指缩放 · 拖拽移动 · 点击圆点查看部件功能</div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+      <div class="head"><b>部件列表</b>（点击定位到部件）</div>
+      <div class="list" id="list"></div>
+      <div class="legend">
+        <div><span class="dot blue"></span>蓝点 = 图中已标注部件</div>
+        <div><span class="dot orange"></span>橙点 = 补充标注（位置为推断，可调整）</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="info" id="info">
+  <button class="close" id="infoClose">✕</button>
+  <div class="i-title"><span class="num" id="infoNum">1</span><span id="infoName"></span><span class="badge" id="infoBadge" style="display:none">补充标注</span></div>
+  <div class="i-desc" id="infoDesc"></div>
+</div>
+
+<script>
+/* ================= 部件数据 =================
+   坐标以图片像素(1338×1003)中心换算成百分比；
+   inferred:true 表示补充标注（位置为推断，可按需调整 x/y）。 */
+const PARTS = [
+  {x:11.5, y:28.7, name:"电控冷却液", desc:"用于电机控制器（电控系统）散热的冷却液，带走功率电子器件工作时产生的热量，防止过热，保证电驱系统稳定运行。"},
+  {x:10.0, y:39.9, name:"电池冷却液", desc:"用于动力电池热管理的冷却液，把电池充放电产生的热量带走，让电池始终工作在适宜温度区间，延长寿命、保障安全。"},
+  {x:6.1,  y:58.8, name:"玻璃水（雨刮水）", desc:"储存在雨刮水壶里的洗涤液，配合雨刮器喷出，用于清洗前挡风玻璃的污渍，保证驾驶员视线清晰。"},
+  {x:26.2, y:34.1, name:"空调高低压管路", desc:"汽车空调制冷系统的管路，分别输送高压和低压制冷剂，构成冷媒循环，实现制冷/制热。"},
+  {x:20.9, y:59.0, name:"冷却液回路", desc:"连接各散热部件的冷却液循环管路，把各部件产生的热量带走，再送到散热器散发到空气中。"},
+  {x:49.9, y:36.6, name:"PEU 集成电驱控制器", desc:"功率电子单元（Power Electronic Unit），是电驱系统的核心：把动力电池的直流电逆变成交流电，并精确控制驱动电机的转速与扭矩。"},
+  {x:48.4, y:90.3, name:"冷凝器", desc:"空调系统的散热部件，把高温高压的气态制冷剂冷却、冷凝成液体，向外界散发热量。"},
+  {x:63.2, y:36.5, name:"高压线束", desc:"传递动力电池高压电的电缆（通常为橙色），连接电池、PEU、电机等高压部件，需要良好的绝缘与防护。"},
+  {x:72.9, y:28.2, name:"低压线束", desc:"传递 12V 低压电的线缆，为灯光、仪表、控制器等低压电器供电并传递控制信号。"},
+  {x:75.2, y:42.6, name:"12V 蓄电池", desc:"低压辅助电源，为灯光、中控屏、控制系统等低压设备供电，并在高压系统休眠时维持整车基础用电。"},
+  {x:85.1, y:28.1, name:"制动液", desc:"液压制动系统的传力介质，把制动踏板的力通过液压传递给制动器实现刹车，需定期检查更换。"},
+  {x:95.3, y:36.5, name:"电器盒（保险丝盒）", desc:"车身电子控制单元，集中管理车窗、门锁、灯光、雨刮器等车身电器的控制。"},
+  {x:81.5, y:58.8, name:"整车控制器（VCU）", desc:"集中布置保险丝和继电器的盒子，负责电路保护与电源分配，防止过载和短路损坏电器。"},
+
+  /* ---- 补充标注（位置为推断） ---- */
+  {x:48.6, y:49.9, name:"驱动电机", desc:"纯电动汽车的动力来源，把电能转化为机械能驱动车轮，响应快、扭矩大、效率高，是电车的“发动机”。", inferred:true},
+  // {x:59.8, y:50.8, name:"减速器", desc:"降低电机转速、放大扭矩并改变动力传递方向，把电机动力平稳地传给车轮。", inferred:true},
+  // {x:31.4, y:46.9, name:"电动空调压缩机", desc:"由高压电直接驱动的压缩机，压缩制冷剂实现制冷，不依赖发动机运转。", inferred:true},
+  {x:48.6, y:30.9, name:"电机控制器（MCU）", desc:"电池直流电↔电机三相交流电；控制电机扭矩、转速，实现驱动与制动能量回收。", inferred:true},
+  {x:38.9, y:84.7, name:"散热器", desc:"冷却系统的散热部件，把冷却液带来的热量散发到空气中，防止动力系统过热。", inferred:true},
+  {x:44.4, y:30.9, name:"高压配电盒（PDU）", desc:"把交流电（交流慢充）整流、升压成直流电，为动力电池充电。", inferred:true},
+  {x:38.9, y:55.8, name:"车载充电机（OBC）", desc:"高压电的“分配中心”，把动力电池的电分配给电机、空调、DC-DC 等高压部件，并带保险保护。", inferred:true},
+  {x:58.1, y:32.8, name:"DC-DC 转换器", desc:"把动力电池的高压直流电降压为 12V 低压电，为低压蓄电池和低压电器供电。", inferred:true},
+  // {x:70.3, y:20.9, name:"整车控制器（VCU）", desc:"整车“大脑”，根据加速、制动等指令协调电机、电池、制动等各系统协同工作。", inferred:true},
+  {x:48.6, y:97.7, name:"动力电池（底盘下方）", desc:"电动车的能量来源，储存电能供全车使用，通常平铺在车身底部以降低重心。", inferred:true}
+];
+
+/* ================= DOM ================= */
+const $ = id => document.getElementById(id);
+const viewport = $('viewport'), stage = $('stage'), img = $('carimg');
+
+/* ================= 渲染热点 ================= */
+PARTS.forEach((p,i)=>{
+  const d = document.createElement('div');
+  d.className = 'spot' + (p.inferred ? ' inferred' : '');
+  d.style.left = p.x + '%';
+  d.style.top = p.y + '%';
+  d.innerHTML = '<div class="pin"><span>' + (i+1) + '</span><span class="lbl">' + p.name + '</span></div>';
+  d.addEventListener('click', e => { e.stopPropagation(); select(i); });
+  stage.appendChild(d);
+});
+
+/* ================= 渲染侧栏列表 ================= */
+const list = $('list');
+PARTS.forEach((p,i)=>{
+  const b = document.createElement('button');
+  b.className = 'item' + (p.inferred ? ' inferred' : '');
+  b.innerHTML = '<span class="num">' + (i+1) + '</span><span>' + p.name + '</span>' + (p.inferred ? '<span class="tag">补充</span>' : '');
+  b.addEventListener('click', ()=>{ select(i); focusOn(i); });
+  list.appendChild(b);
+});
+
+/* ================= 选中部件 ================= */
+let activeIdx = -1;
+function select(i){
+  activeIdx = i;
+  document.querySelectorAll('.spot').forEach((s,k)=>s.classList.toggle('active', k===i));
+  document.querySelectorAll('.item').forEach((s,k)=>s.classList.toggle('active', k===i));
+  const p = PARTS[i];
+  $('infoNum').textContent = i+1;
+  $('infoName').textContent = p.name;
+  $('infoDesc').textContent = p.desc;
+  $('infoBadge').style.display = p.inferred ? 'inline-block' : 'none';
+  $('info').classList.add('show');
+}
+$('infoClose').addEventListener('click', ()=>{
+  $('info').classList.remove('show');
+  if(activeIdx>=0){ document.querySelectorAll('.spot').forEach((s,k)=>s.classList.toggle('active',false)); document.querySelectorAll('.item').forEach((s,k)=>s.classList.toggle('active',false)); activeIdx=-1; }
+});
+
+/* ================= 缩放 / 平移 ================= */
+const BW = 1338, BH = 1003;
+let scale = 1, tx = 0, ty = 0;
+
+function apply(){
+  stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+  stage.style.setProperty('--invscale', (1/scale).toFixed(4));
+  $('zoomInd').textContent = Math.round(scale * 100) + '%';
+}
+function fit(){
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  const s = Math.min(vw / BW, vh / BH);
+  scale = s;
+  tx = (vw - BW * s) / 2;
+  ty = (vh - BH * s) / 2;
+  apply();
+}
+function zoomAt(px, py, factor){
+  const ns = Math.min(Math.max(scale * factor, 0.15), 6);
+  const k = ns / scale;
+  tx = px - (px - tx) * k;
+  ty = py - (py - ty) * k;
+  scale = ns;
+  apply();
+}
+function panBy(dx, dy){ tx += dx; ty += dy; apply(); }
+
+$('btnIn').addEventListener('click', ()=>{ const r=viewport.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, 1.3); });
+$('btnOut').addEventListener('click', ()=>{ const r=viewport.getBoundingClientRect(); zoomAt(r.width/2, r.height/2, 1/1.3); });
+$('btnFit').addEventListener('click', fit);
+$('btnReset').addEventListener('click', fit);
+$('btnList').addEventListener('click', ()=> $('sidebar').classList.toggle('open'));
+
+/* 定位到某部件（平滑放大居中） */
+function focusOn(i){
+  const p = PARTS[i];
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  const targetScale = Math.min(Math.max(scale, 2.2), 4);
+  // 目标：部件点位于视口中心
+  let s = targetScale;
+  const sx = p.x/100 * BW * s;   // 部件在缩放后舞台中的 x
+  const sy = p.y/100 * BH * s;
+  const ntx = vw/2 - sx;
+  const nty = vh/2 - sy;
+  stage.classList.add('transition');
+  scale = s; tx = ntx; ty = nty;
+  apply();
+  setTimeout(()=> stage.classList.remove('transition'), 360);
+}
+
+/* 鼠标滚轮缩放 */
+viewport.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = viewport.getBoundingClientRect();
+  const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+  zoomAt(e.clientX - r.left, e.clientY - r.top, factor);
+}, { passive:false });
+
+/* 指针：单指拖拽平移 + 双指捏合缩放 */
+const pointers = new Map();
+let lastPinchDist = 0, lastMid = null;
+let moved = false, panning = false;
+
+viewport.addEventListener('pointerdown', e => {
+  viewport.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  moved = false;
+  if(pointers.size === 1){ panning = true; viewport.classList.add('grabbing'); }
+  if(pointers.size === 2){
+    const [a,b] = [...pointers.values()];
+    lastPinchDist = Math.hypot(a.x-b.x, a.y-b.y);
+    lastMid = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+  }
+});
+viewport.addEventListener('pointermove', e => {
+  if(!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  if(pointers.size === 1 && panning){
+    if(Math.abs(dx)+Math.abs(dy) > 2) moved = true;
+    if(moved) panBy(dx, dy);
+  } else if(pointers.size === 2){
+    const [a,b] = [...pointers.values()];
+    const dist = Math.hypot(a.x-b.x, a.y-b.y);
+    const mid = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    const r = viewport.getBoundingClientRect();
+    if(lastPinchDist > 0) zoomAt(mid.x - r.left, mid.y - r.top, dist/lastPinchDist);
+    lastPinchDist = dist;
+    lastMid = mid;
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size < 2){ lastPinchDist = 0; }
+  if(pointers.size === 0){ panning = false; viewport.classList.remove('grabbing'); }
+}
+viewport.addEventListener('pointerup', endPointer);
+viewport.addEventListener('pointercancel', endPointer);
+
+/* 双击切换放大 */
+viewport.addEventListener('dblclick', e => {
+  const r = viewport.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  zoomAt(px, py, scale > 1.5 ? 1/1.8 : 1.8);
+});
+
+/* 键盘 + - */
+window.addEventListener('keydown', e => {
+  if(e.key==='+' || e.key==='='){ const r=viewport.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1.25); }
+  else if(e.key==='-'){ const r=viewport.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1/1.25); }
+  else if(e.key==='0'){ fit(); }
+});
+
+/* 初始适配 */
+stage.style.width = BW + 'px';
+stage.style.height = BH + 'px';
+img.addEventListener('load', fit);
+window.addEventListener('resize', fit);
+fit();
+</script>
+</body>
+</html>
